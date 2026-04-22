@@ -1,0 +1,12 @@
+[Unit]
+Description=ngrok HTTP tunnel
+After=network.target
+
+[Service]
+ExecStart=/home/valex92/sms-calendar-agent/ngrok http 8000
+Restart=always
+RestartSec=5
+User=valex92
+
+[Install]
+WantedBy=multi-user.target

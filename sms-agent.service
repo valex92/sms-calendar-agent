@@ -1,0 +1,14 @@
+[Unit]
+Description=SMS Calendar Agent
+After=network.target
+
+[Service]
+User=valex92
+WorkingDirectory=/home/valex92/sms-calendar-agent
+# This executes uvicorn directly from the virtual environment we created
+ExecStart=/home/valex92/sms-calendar-agent/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

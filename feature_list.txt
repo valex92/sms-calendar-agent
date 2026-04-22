@@ -1,0 +1,5 @@
+1. Add the ability to adjust the description field in events
+2. Add the last ~50 lines of the agent.log into context to improve with understanding
+3. more flexible search (next dr appt, or similar)
+4. invite work accounts
+5. dynamic calendar based on user context and intent
