@@ -51,6 +51,7 @@ def process_sms_background(body: str, from_number: str):
         search_query = parsed_event.get("target_search_query")
         target_date = parsed_event.get("target_date")
         recurrence = parsed_event.get("recurrence")
+        attendees = parsed_event.get("attendees")
         
         if action == "create":
             if item_type == "task":
@@ -65,7 +66,7 @@ def process_sms_background(body: str, from_number: str):
                     send_outbound_sms(from_number, "I didn't get all the necessary details (title, start time). Please try again.")
                     return
                     
-                success, message = create_event(title, start_time, end_time, location, recurrence)
+                success, message = create_event(title, start_time, end_time, location, recurrence, attendees)
                 send_outbound_sms(from_number, message)
                 return
                 
@@ -75,7 +76,7 @@ def process_sms_background(body: str, from_number: str):
                 matches = find_event(search_query, target_date)
                 if len(matches) == 1:
                     logger.info(f"Found match: {matches[0].get('summary')}. Updating...")
-                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence)
+                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence, attendees)
                     logger.info(f"Result: {message}")
                     send_outbound_sms(from_number, message)
                     return

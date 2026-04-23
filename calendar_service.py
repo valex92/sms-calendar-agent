@@ -1,36 +1,59 @@
 import os.path
 import datetime
 
-from google.oauth2 import service_account
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from logger import logger
 from config import config
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/tasks"
+USER_SCOPES = [
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/calendar.events"
 ]
 
-def get_credentials():
-    """Authenticates and returns the Google API credentials using a Service Account."""
-    if not os.path.exists("service_account.json"):
-        logger.error("Missing service_account.json! Please download it from Google Cloud Console.")
-        return None
+def get_user_credentials():
+    """Authenticates using OAuth (token.json) for Tasks."""
+    creds = None
+    
+    # 1. Try to load existing user credentials from token.json
+    if os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", USER_SCOPES)
         
-    try:
-        creds = service_account.Credentials.from_service_account_file(
-            "service_account.json", scopes=SCOPES
-        )
-        return creds
-    except Exception as e:
-        logger.error(f"Failed to load service account credentials: {e}")
-        return None
+    # 2. If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                logger.error(f"Failed to refresh token: {e}")
+                creds = None
+                
+        if not creds:
+            if os.path.exists("credentials.json"):
+                logger.info("Found credentials.json. Starting OAuth flow for Tasks...")
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    "credentials.json", USER_SCOPES
+                )
+                # This will open a browser to authenticate
+                creds = flow.run_local_server(port=0)
+            else:
+                logger.error("Missing credentials.json for Tasks!")
+                return None
+                
+        # Save the credentials for the next run
+        with open("token.json", "w") as token:
+            token.write(creds.to_json())
+            
+    return creds
 
 def get_calendar_service():
     """Returns the Google Calendar API service."""
-    creds = get_credentials()
+    creds = get_user_credentials()
     if not creds: return None
     try:
         service = build("calendar", "v3", credentials=creds)
@@ -41,7 +64,7 @@ def get_calendar_service():
 
 def get_tasks_service():
     """Returns the Google Tasks API service."""
-    creds = get_credentials()
+    creds = get_user_credentials()
     if not creds: return None
     try:
         service = build("tasks", "v1", credentials=creds)
@@ -50,7 +73,7 @@ def get_tasks_service():
         logger.error(f"An error occurred initializing Tasks API: {error}")
         return None
 
-def create_event(title: str, start_time: str, end_time: str, location: str = None, recurrence: str = None):
+def create_event(title: str, start_time: str, end_time: str, location: str = None, recurrence: str = None, attendees: list = None):
     service = get_calendar_service()
     if not service:
         return False, "Failed to authenticate with Google Calendar. Is credentials.json present?"
@@ -72,6 +95,9 @@ def create_event(title: str, start_time: str, end_time: str, location: str = Non
         
     if recurrence:
         event['recurrence'] = [recurrence]
+        
+    if attendees:
+        event['attendees'] = [{'email': email} for email in attendees]
 
     try:
         event = service.events().insert(calendarId=config.TARGET_CALENDAR_ID, body=event).execute()
@@ -132,7 +158,7 @@ def find_event(query: str, date_str: str):
         logger.error(f"An error occurred finding event: {error}")
         return []
 
-def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None):
+def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None, attendees: list = None):
     service = get_calendar_service()
     if not service: return False, "Auth failed."
     
@@ -147,6 +173,7 @@ def update_event(event_id: str, new_title: str, new_start: str, new_end: str, lo
             event['end']['timeZone'] = 'America/New_York'
         if location: event['location'] = location
         if recurrence: event['recurrence'] = [recurrence]
+        if attendees: event['attendees'] = [{'email': email} for email in attendees]
             
         updated_event = service.events().patch(calendarId=config.TARGET_CALENDAR_ID, eventId=event_id, body=event).execute()
         logger.info(f"Event updated: {updated_event.get('htmlLink')}")
@@ -206,7 +233,7 @@ def delete_task(task_id: str):
 
 if __name__ == '__main__':
     # Run this file directly to trigger the initial OAuth flow and generate token.json
-    logger.info("Initiating Google API authentication...")
-    creds = get_credentials()
+    logger.info("Initiating Google Tasks API authentication...")
+    creds = get_user_credentials()
     if creds:
-        logger.info("Successfully authenticated with Google APIs!")
+        logger.info("Successfully authenticated with Google Tasks and Calendar APIs!")

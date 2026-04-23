@@ -36,10 +36,12 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
         "start_time": "ISO 8601 datetime string, e.g., 2026-04-17T14:00:00{timezone_offset}. Null if it's a task or cancelling.",
         "end_time": "ISO 8601 datetime string, e.g., 2026-04-17T15:00:00{timezone_offset}. Null if it's a task or cancelling.",
         "due_date": "ISO 8601 datetime string if it's a task with a deadline, otherwise null.",
-        "recurrence": "String, RFC 5545 RRULE (e.g. 'RRULE:FREQ=YEARLY', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE') if recurring, otherwise null."
+        "recurrence": "String, RFC 5545 RRULE (e.g. 'RRULE:FREQ=YEARLY', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE') if recurring, otherwise null.",
+        "attendees": "Array of strings (email addresses) to invite, otherwise null."
     }}
     
     Make sure to infer relative dates (tomorrow, next wednesday) properly based on the current date and time.
+    CRITICAL INSTRUCTION: If the user mentions adding work calendars or inviting work emails (e.g. "add our work calendars", "invite our work emails"), you MUST include 'attendee1@example.com' and 'attendee2@example.com' in the attendees array. Also extract any other explicit email addresses mentioned.
     """
     
     response = model.generate_content(prompt)

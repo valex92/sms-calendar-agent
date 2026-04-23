@@ -23,6 +23,7 @@ def test_pipeline(text: str):
     search_query = parsed_event.get("target_search_query")
     target_date = parsed_event.get("target_date")
     recurrence = parsed_event.get("recurrence")
+    attendees = parsed_event.get("attendees")
     
     if action == "create":
         if item_type == "task":
@@ -31,7 +32,7 @@ def test_pipeline(text: str):
             logger.info(f"Result: {message}")
         else:
             logger.info("2. Sending to Google Calendar...")
-            success, message = create_event(title, start_time, end_time, location, recurrence)
+            success, message = create_event(title, start_time, end_time, location, recurrence, attendees)
             logger.info(f"Result: {message}")
     elif action == "update":
         if item_type == "event":
@@ -40,7 +41,7 @@ def test_pipeline(text: str):
             if len(matches) == 1:
                 event_id = matches[0]['id']
                 logger.info(f"Found match: {matches[0].get('summary')}. Updating...")
-                success, message = update_event(event_id, title, start_time, end_time, location, recurrence)
+                success, message = update_event(event_id, title, start_time, end_time, location, recurrence, attendees)
                 logger.info(f"Result: {message}")
             elif len(matches) == 0:
                 logger.info("Result: Could not find any event matching that description to update.")
