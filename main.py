@@ -60,6 +60,7 @@ def process_sms_background(body: str, from_number: str):
                     send_outbound_sms(from_number, "I didn't get a title for the task. Please try again.")
                     return
                 success, message = create_task(title, due_date, description)
+                logger.info(f"Result: {message}")
                 send_outbound_sms(from_number, message)
                 return
             else:
@@ -68,6 +69,7 @@ def process_sms_background(body: str, from_number: str):
                     return
                     
                 success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description)
+                logger.info(f"Result: {message}")
                 send_outbound_sms(from_number, message)
                 return
                 
