@@ -1,5 +1,6 @@
 import os.path
 import datetime
+from difflib import SequenceMatcher
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -131,37 +132,85 @@ def create_task(title: str, due_date: str = None, notes: str = None):
         logger.error(f"An error occurred creating task: {error}")
         return False, f"Failed to add task. Please check the logs."
 
+FUZZY_MATCH_THRESHOLD = 0.4
+
+def _fuzzy_score(query: str, text: str) -> float:
+    """Returns a similarity score (0-1) between the query and text."""
+    return SequenceMatcher(None, query.lower(), text.lower()).ratio()
+
+def _get_time_window(date_str: str = None):
+    """
+    Returns (timeMin, timeMax) strings for the Calendar API.
+    - If date_str is provided: +/- 7 days around that date.
+    - If not: from now to 30 days in the future.
+    """
+    if date_str:
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        timeMin = (date_obj - datetime.timedelta(days=7)).strftime("%Y-%m-%dT00:00:00Z")
+        timeMax = (date_obj + datetime.timedelta(days=7)).strftime("%Y-%m-%dT23:59:59Z")
+    else:
+        now = datetime.datetime.utcnow()
+        timeMin = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        timeMax = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%dT23:59:59Z")
+    return timeMin, timeMax
+
+def _fuzzy_filter_events(events: list, query: str) -> list:
+    """
+    Scores events against the query using fuzzy matching and returns
+    those above the threshold, sorted by best match first.
+    """
+    scored = []
+    for event in events:
+        summary = event.get('summary', '')
+        score = _fuzzy_score(query, summary)
+        if score >= FUZZY_MATCH_THRESHOLD:
+            scored.append((score, event))
+    # Sort by best match first
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [event for _, event in scored]
+
 def find_event(query: str, date_str: str):
     service = get_calendar_service()
     if not service: return []
     
+    timeMin, timeMax = _get_time_window(date_str)
+    
     try:
-        if date_str:
-            # Broaden the search to +/- 7 days to handle cases where the user doesn't 
-            # specify the exact date in the update message, or Gemini infers it slightly wrong.
-            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            timeMin = (date_obj - datetime.timedelta(days=7)).strftime("%Y-%m-%dT00:00:00Z")
-            timeMax = (date_obj + datetime.timedelta(days=7)).strftime("%Y-%m-%dT23:59:59Z")
-            events_result = service.events().list(
-                calendarId=config.TARGET_CALENDAR_ID, 
-                q=query, 
-                timeMin=timeMin, 
-                timeMax=timeMax,
-                singleEvents=True
-            ).execute()
+        # Pass 1: Use Google Calendar's built-in q search
+        events_result = service.events().list(
+            calendarId=config.TARGET_CALENDAR_ID, 
+            q=query, 
+            timeMin=timeMin, 
+            timeMax=timeMax,
+            singleEvents=True
+        ).execute()
+        matches = events_result.get('items', [])
+        
+        if matches:
+            logger.info(f"Found {len(matches)} event(s) via q-search for '{query}'")
+            return matches
+        
+        # Pass 2: Fetch all events in the window and fuzzy-match locally
+        logger.info(f"q-search returned 0 results for '{query}', trying fuzzy match...")
+        all_events_result = service.events().list(
+            calendarId=config.TARGET_CALENDAR_ID, 
+            timeMin=timeMin, 
+            timeMax=timeMax,
+            singleEvents=True
+        ).execute()
+        all_events = all_events_result.get('items', [])
+        fuzzy_matches = _fuzzy_filter_events(all_events, query)
+        
+        if fuzzy_matches:
+            logger.info(f"Fuzzy match found {len(fuzzy_matches)} event(s) for '{query}': {[e.get('summary') for e in fuzzy_matches]}")
         else:
-            now = datetime.datetime.utcnow().isoformat() + 'Z'
-            events_result = service.events().list(
-                calendarId=config.TARGET_CALENDAR_ID, 
-                q=query, 
-                timeMin=now, 
-                singleEvents=True
-            ).execute()
-            
-        return events_result.get('items', [])
+            logger.info(f"Fuzzy match also returned 0 results for '{query}' across {len(all_events)} events in window")
+        
+        return fuzzy_matches
     except HttpError as error:
         logger.error(f"An error occurred finding event: {error}")
         return []
+
 
 def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None, attendees: list = None, description: str = None):
     service = get_calendar_service()
@@ -205,7 +254,24 @@ def find_task(query: str):
     try:
         tasks_result = service.tasks().list(tasklist='@default').execute()
         tasks = tasks_result.get('items', [])
-        matches = [t for t in tasks if query.lower() in t.get('title', '').lower()]
+        
+        # Score all tasks using fuzzy matching
+        scored = []
+        for t in tasks:
+            title = t.get('title', '')
+            score = _fuzzy_score(query, title)
+            if score >= FUZZY_MATCH_THRESHOLD:
+                scored.append((score, t))
+        
+        # Sort by best match first
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matches = [t for _, t in scored]
+        
+        if matches:
+            logger.info(f"Found {len(matches)} task(s) for '{query}': {[t.get('title') for t in matches]}")
+        else:
+            logger.info(f"No tasks matched '{query}' (checked {len(tasks)} tasks)")
+        
         return matches
     except HttpError as error:
         logger.error(f"Error finding task: {error}")
