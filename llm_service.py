@@ -37,7 +37,8 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
         "end_time": "ISO 8601 datetime string, e.g., 2026-04-17T15:00:00{timezone_offset}. Null if it's a task or cancelling.",
         "due_date": "ISO 8601 datetime string if it's a task with a deadline, otherwise null.",
         "recurrence": "String, RFC 5545 RRULE (e.g. 'RRULE:FREQ=YEARLY', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE') if recurring, otherwise null.",
-        "attendees": "Array of strings (email addresses) to invite, otherwise null."
+        "attendees": "Array of strings (email addresses) to invite, otherwise null.",
+        "description": "String, any additional notes, details, or description for the event or task mentioned by the user, otherwise null."
     }}
     
     Make sure to infer relative dates (tomorrow, next wednesday) properly based on the current date and time.

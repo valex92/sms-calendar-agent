@@ -73,7 +73,7 @@ def get_tasks_service():
         logger.error(f"An error occurred initializing Tasks API: {error}")
         return None
 
-def create_event(title: str, start_time: str, end_time: str, location: str = None, recurrence: str = None, attendees: list = None):
+def create_event(title: str, start_time: str, end_time: str, location: str = None, recurrence: str = None, attendees: list = None, description: str = None):
     service = get_calendar_service()
     if not service:
         return False, "Failed to authenticate with Google Calendar. Is credentials.json present?"
@@ -99,6 +99,9 @@ def create_event(title: str, start_time: str, end_time: str, location: str = Non
     if attendees:
         event['attendees'] = [{'email': email} for email in attendees]
 
+    if description:
+        event['description'] = description
+
     try:
         event = service.events().insert(calendarId=config.TARGET_CALENDAR_ID, body=event).execute()
         logger.info('Event created: %s' % (event.get('htmlLink')))
@@ -107,7 +110,7 @@ def create_event(title: str, start_time: str, end_time: str, location: str = Non
         logger.error(f"An error occurred creating event: {error}")
         return False, f"Failed to schedule event. Please check the logs."
 
-def create_task(title: str, due_date: str = None):
+def create_task(title: str, due_date: str = None, notes: str = None):
     service = get_tasks_service()
     if not service:
         return False, "Failed to authenticate with Google Tasks. Is credentials.json present?"
@@ -117,6 +120,8 @@ def create_task(title: str, due_date: str = None):
     }
     if due_date:
         task['due'] = due_date
+    if notes:
+        task['notes'] = notes
 
     try:
         task = service.tasks().insert(tasklist='@default', body=task).execute()
@@ -158,7 +163,7 @@ def find_event(query: str, date_str: str):
         logger.error(f"An error occurred finding event: {error}")
         return []
 
-def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None, attendees: list = None):
+def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None, attendees: list = None, description: str = None):
     service = get_calendar_service()
     if not service: return False, "Auth failed."
     
@@ -174,6 +179,7 @@ def update_event(event_id: str, new_title: str, new_start: str, new_end: str, lo
         if location: event['location'] = location
         if recurrence: event['recurrence'] = [recurrence]
         if attendees: event['attendees'] = [{'email': email} for email in attendees]
+        if description: event['description'] = description
             
         updated_event = service.events().patch(calendarId=config.TARGET_CALENDAR_ID, eventId=event_id, body=event).execute()
         logger.info(f"Event updated: {updated_event.get('htmlLink')}")
@@ -205,13 +211,14 @@ def find_task(query: str):
         logger.error(f"Error finding task: {error}")
         return []
 
-def update_task(task_id: str, new_title: str, new_due: str):
+def update_task(task_id: str, new_title: str, new_due: str, new_notes: str = None):
     service = get_tasks_service()
     if not service: return False, "Auth failed."
     try:
         task = service.tasks().get(tasklist='@default', task=task_id).execute()
         if new_title: task['title'] = new_title
         if new_due: task['due'] = new_due
+        if new_notes: task['notes'] = new_notes
         
         updated_task = service.tasks().patch(tasklist='@default', task=task_id, body=task).execute()
         logger.info(f"Task updated: {updated_task.get('title')}")

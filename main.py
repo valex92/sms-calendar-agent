@@ -52,13 +52,14 @@ def process_sms_background(body: str, from_number: str):
         target_date = parsed_event.get("target_date")
         recurrence = parsed_event.get("recurrence")
         attendees = parsed_event.get("attendees")
+        description = parsed_event.get("description")
         
         if action == "create":
             if item_type == "task":
                 if not title:
                     send_outbound_sms(from_number, "I didn't get a title for the task. Please try again.")
                     return
-                success, message = create_task(title, due_date)
+                success, message = create_task(title, due_date, description)
                 send_outbound_sms(from_number, message)
                 return
             else:
@@ -66,7 +67,7 @@ def process_sms_background(body: str, from_number: str):
                     send_outbound_sms(from_number, "I didn't get all the necessary details (title, start time). Please try again.")
                     return
                     
-                success, message = create_event(title, start_time, end_time, location, recurrence, attendees)
+                success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description)
                 send_outbound_sms(from_number, message)
                 return
                 
@@ -76,7 +77,7 @@ def process_sms_background(body: str, from_number: str):
                 matches = find_event(search_query, target_date)
                 if len(matches) == 1:
                     logger.info(f"Found match: {matches[0].get('summary')}. Updating...")
-                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence, attendees)
+                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence, attendees, description)
                     logger.info(f"Result: {message}")
                     send_outbound_sms(from_number, message)
                     return
@@ -93,7 +94,7 @@ def process_sms_background(body: str, from_number: str):
                 matches = find_task(search_query)
                 if len(matches) == 1:
                     logger.info(f"Found match: {matches[0].get('title')}. Updating...")
-                    success, message = update_task(matches[0]['id'], title, due_date)
+                    success, message = update_task(matches[0]['id'], title, due_date, description)
                     logger.info(f"Result: {message}")
                     send_outbound_sms(from_number, message)
                     return
