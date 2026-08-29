@@ -74,21 +74,76 @@ def get_tasks_service():
         logger.error(f"An error occurred initializing Tasks API: {error}")
         return None
 
-def create_event(title: str, start_time: str, end_time: str, location: str = None, recurrence: str = None, attendees: list = None, description: str = None):
+def _is_date_only(val: str) -> bool:
+    """Checks if a string is in YYYY-MM-DD date-only format."""
+    if not val:
+        return False
+    val = val.strip()
+    if len(val) == 10 and val.count('-') == 2 and 'T' not in val:
+        try:
+            datetime.date.fromisoformat(val)
+            return True
+        except ValueError:
+            return False
+    return False
+
+def _format_event_time(start_time: str, end_time: str = None, all_day: bool = False) -> tuple[dict, dict]:
+    """
+    Formats start and end dictionaries for Google Calendar API.
+    Handles all-day events (using 'date' and exclusive end date) and timed events (using 'dateTime').
+    """
+    is_all_day_event = bool(all_day) or _is_date_only(start_time)
+
+    if is_all_day_event:
+        # Extract YYYY-MM-DD from start_time
+        start_date_str = start_time.split('T')[0] if 'T' in start_time else start_time[:10]
+        start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+
+        if end_time:
+            end_date_str = end_time.split('T')[0] if 'T' in end_time else end_time[:10]
+            try:
+                end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                end_date = start_date + datetime.timedelta(days=1)
+
+            # Google Calendar requires exclusive end date (must be strictly after start_date)
+            if end_date <= start_date:
+                end_date = start_date + datetime.timedelta(days=1)
+        else:
+            end_date = start_date + datetime.timedelta(days=1)
+
+        start_dict = {'date': start_date.strftime("%Y-%m-%d")}
+        end_dict = {'date': end_date.strftime("%Y-%m-%d")}
+    else:
+        if not end_time:
+            try:
+                dt = datetime.datetime.fromisoformat(start_time)
+                end_time = (dt + datetime.timedelta(hours=1)).isoformat()
+            except Exception:
+                end_time = start_time
+
+        start_dict = {
+            'dateTime': start_time,
+            'timeZone': 'America/New_York',
+        }
+        end_dict = {
+            'dateTime': end_time,
+            'timeZone': 'America/New_York',
+        }
+
+    return start_dict, end_dict
+
+def create_event(title: str, start_time: str, end_time: str = None, location: str = None, recurrence: str = None, attendees: list = None, description: str = None, all_day: bool = False):
     service = get_calendar_service()
     if not service:
         return False, "Failed to authenticate with Google Calendar. Is credentials.json present?"
 
+    start_dict, end_dict = _format_event_time(start_time, end_time, all_day=all_day)
+
     event = {
         'summary': title,
-        'start': {
-            'dateTime': start_time,
-            'timeZone': 'America/New_York',
-        },
-        'end': {
-            'dateTime': end_time,
-            'timeZone': 'America/New_York',
-        },
+        'start': start_dict,
+        'end': end_dict,
     }
     
     if location:
@@ -212,19 +267,40 @@ def find_event(query: str, date_str: str):
         return []
 
 
-def update_event(event_id: str, new_title: str, new_start: str, new_end: str, location: str = None, recurrence: str = None, attendees: list = None, description: str = None):
+def update_event(event_id: str, new_title: str = None, new_start: str = None, new_end: str = None, location: str = None, recurrence: str = None, attendees: list = None, description: str = None, all_day: bool = None):
     service = get_calendar_service()
     if not service: return False, "Auth failed."
     
     try:
         event = service.events().get(calendarId=config.TARGET_CALENDAR_ID, eventId=event_id).execute()
         if new_title: event['summary'] = new_title
-        if new_start: 
-            event['start']['dateTime'] = new_start
-            event['start']['timeZone'] = 'America/New_York'
-        if new_end: 
-            event['end']['dateTime'] = new_end
-            event['end']['timeZone'] = 'America/New_York'
+        if new_start or all_day is not None:
+            existing_start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
+            start_to_use = new_start or existing_start
+            existing_end = event.get('end', {}).get('dateTime') or event.get('end', {}).get('date')
+            end_to_use = new_end or existing_end
+            
+            # If all_day wasn't explicitly passed, check if existing event was all_day and new_start isn't timed
+            if all_day is None:
+                if 'date' in event.get('start', {}) and not ('T' in (new_start or '')):
+                    is_all_day = True
+                elif _is_date_only(new_start or ''):
+                    is_all_day = True
+                else:
+                    is_all_day = False
+            else:
+                is_all_day = all_day
+
+            start_dict, end_dict = _format_event_time(start_to_use, end_to_use, all_day=is_all_day)
+            event['start'] = start_dict
+            event['end'] = end_dict
+        elif new_end:
+            if 'date' in event.get('start', {}):
+                end_date_str = new_end.split('T')[0] if 'T' in new_end else new_end[:10]
+                event['end'] = {'date': end_date_str}
+            else:
+                event['end'] = {'dateTime': new_end, 'timeZone': 'America/New_York'}
+
         if location: event['location'] = location
         if recurrence: event['recurrence'] = [recurrence]
         if attendees: event['attendees'] = [{'email': email} for email in attendees]

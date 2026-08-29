@@ -43,6 +43,14 @@ def process_sms_background(body: str, from_number: str):
             
         item_type = parsed_event.get("type", "event")
         action = parsed_event.get("action", "create")
+        all_day_raw = parsed_event.get("all_day")
+        if isinstance(all_day_raw, str):
+            all_day = all_day_raw.lower() in ("true", "1", "yes")
+        elif all_day_raw is not None:
+            all_day = bool(all_day_raw)
+        else:
+            all_day = None
+
         title = parsed_event.get("title")
         location = parsed_event.get("location")
         start_time = parsed_event.get("start_time")
@@ -64,11 +72,14 @@ def process_sms_background(body: str, from_number: str):
                 send_outbound_sms(from_number, message)
                 return
             else:
-                if not title or not start_time or not end_time:
+                if not title or not start_time:
+                    send_outbound_sms(from_number, "I didn't get all the necessary details (title, start time). Please try again.")
+                    return
+                if not (all_day or (start_time and len(start_time) == 10 and 'T' not in start_time)) and not end_time:
                     send_outbound_sms(from_number, "I didn't get all the necessary details (title, start time). Please try again.")
                     return
                     
-                success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description)
+                success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description, all_day=bool(all_day))
                 logger.info(f"Result: {message}")
                 send_outbound_sms(from_number, message)
                 return
@@ -79,7 +90,7 @@ def process_sms_background(body: str, from_number: str):
                 matches = find_event(search_query, target_date)
                 if len(matches) == 1:
                     logger.info(f"Found match: {matches[0].get('summary')}. Updating...")
-                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence, attendees, description)
+                    success, message = update_event(matches[0]['id'], title, start_time, end_time, location, recurrence, attendees, description, all_day=all_day)
                     logger.info(f"Result: {message}")
                     send_outbound_sms(from_number, message)
                     return

@@ -86,12 +86,13 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
     {{
         "type": "event", // or "task"
         "action": "create", // or "update", or "cancel"
+        "all_day": "Boolean, true if the event is an all-day or full-day event (e.g. 'all day', 'full day', birthdays, anniversaries, holidays, vacations/trips, school closures, or events where no specific time is mentioned). False for timed events or tasks.",
         "target_search_query": "String, if action is update/cancel, a short 1-3 word keyword to search for the original item (e.g. 'haircut'). Use conversation history to find the exact title if the user says 'the last event' or similar. Null if creating.",
         "target_date": "ISO 8601 string of the DATE ONLY (e.g. '2026-04-17') the original event/task was scheduled on. Use conversation history to find this if the user doesn't specify. Null if creating.",
         "title": "String, a short, sensible, and descriptive title for the event (e.g., 'Trip to Disney', 'Doctor Appointment'). Omit time and date information.",
         "location": "String, physical address or location if mentioned, otherwise null",
-        "start_time": "ISO 8601 datetime string, e.g., 2026-04-17T14:00:00{timezone_offset}. Null if it's a task or cancelling.",
-        "end_time": "ISO 8601 datetime string, e.g., 2026-04-17T15:00:00{timezone_offset}. Null if it's a task or cancelling.",
+        "start_time": "String. For timed events: ISO 8601 datetime string, e.g., 2026-04-17T14:00:00{timezone_offset}. For all-day events: Date string 'YYYY-MM-DD', e.g., '2026-04-17'. Null if it's a task or cancelling.",
+        "end_time": "String. For timed events: ISO 8601 datetime string, e.g., 2026-04-17T15:00:00{timezone_offset}. For all-day events: Exclusive end date string 'YYYY-MM-DD' representing the day after the event ends (e.g., '2026-04-18' for a 1-day event on '2026-04-17', or '2026-04-20' for a multi-day event spanning April 17-19). Null if it's a task or cancelling.",
         "due_date": "ISO 8601 datetime string if it's a task with a deadline, otherwise null.",
         "recurrence": "String, RFC 5545 RRULE (e.g. 'RRULE:FREQ=YEARLY', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE') if recurring, otherwise null.",
         "attendees": "Array of strings (email addresses) to invite, otherwise null.",
@@ -99,6 +100,7 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
     }}
     
     Make sure to infer relative dates (tomorrow, next wednesday) properly based on the current date and time.
+    CRITICAL INSTRUCTION FOR ALL-DAY EVENTS: If the user mentions 'all day', 'full day', or creates an event for a day without specifying start/end hours (e.g., 'Mom\'s Birthday', 'vacation Monday through Friday', 'school closed tomorrow', 'primrose closed on 9/7 all day'), set 'all_day' to true, 'start_time' to 'YYYY-MM-DD', and 'end_time' to the exclusive end date 'YYYY-MM-DD' (the day immediately following the last day of the event).
     CRITICAL INSTRUCTION: If the user mentions adding work calendars or inviting work emails (e.g. "add our work calendars", "invite our work emails"), you MUST include 'attendee1@example.com' and 'attendee2@example.com' in the attendees array. Also extract any other explicit email addresses mentioned.
     """
     

@@ -15,6 +15,14 @@ def test_pipeline(text: str):
     
     item_type = parsed_event.get("type", "event")
     action = parsed_event.get("action", "create")
+    all_day_raw = parsed_event.get("all_day")
+    if isinstance(all_day_raw, str):
+        all_day = all_day_raw.lower() in ("true", "1", "yes")
+    elif all_day_raw is not None:
+        all_day = bool(all_day_raw)
+    else:
+        all_day = None
+
     title = parsed_event.get("title")
     location = parsed_event.get("location")
     start_time = parsed_event.get("start_time")
@@ -33,7 +41,7 @@ def test_pipeline(text: str):
             logger.info(f"Result: {message}")
         else:
             logger.info("2. Sending to Google Calendar...")
-            success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description)
+            success, message = create_event(title, start_time, end_time, location, recurrence, attendees, description, all_day=bool(all_day))
             logger.info(f"Result: {message}")
     elif action == "update":
         if item_type == "event":
@@ -42,7 +50,7 @@ def test_pipeline(text: str):
             if len(matches) == 1:
                 event_id = matches[0]['id']
                 logger.info(f"Found match: {matches[0].get('summary')}. Updating...")
-                success, message = update_event(event_id, title, start_time, end_time, location, recurrence, attendees, description)
+                success, message = update_event(event_id, title, start_time, end_time, location, recurrence, attendees, description, all_day=all_day)
                 logger.info(f"Result: {message}")
             elif len(matches) == 0:
                 logger.info("Result: Could not find any event matching that description to update.")
