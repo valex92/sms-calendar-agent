@@ -17,4 +17,8 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     TARGET_CALENDAR_ID = os.getenv("TARGET_CALENDAR_ID", "primary")
 
+    # Comma-separated emails to invite when the user says "add our work calendars/emails"
+    work_emails_str = os.getenv("WORK_EMAILS", "")
+    WORK_EMAILS = [e.strip() for e in work_emails_str.split(",") if e.strip()]
+
 config = Config()

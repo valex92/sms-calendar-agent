@@ -69,7 +69,7 @@ class TestCreateAndUpdateEventMocked(unittest.TestCase):
             title="Primrose Closed",
             start_time="2026-09-07",
             end_time="2026-09-08",
-            attendees=["attendee1@example.com"],
+            attendees=["attendee@example.com"],
             all_day=True
         )
 
@@ -82,7 +82,7 @@ class TestCreateAndUpdateEventMocked(unittest.TestCase):
         self.assertEqual(body["end"], {"date": "2026-09-08"})
         self.assertNotIn("dateTime", body["start"])
         self.assertNotIn("dateTime", body["end"])
-        self.assertEqual(body["attendees"], [{"email": "attendee1@example.com"}])
+        self.assertEqual(body["attendees"], [{"email": "attendee@example.com"}])
 
     @patch("calendar_service.get_calendar_service")
     def test_update_timed_to_all_day(self, mock_get_svc):

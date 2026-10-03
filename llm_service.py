@@ -73,6 +73,17 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
     === END HISTORY ===
     """
 
+    # Work emails are loaded from the WORK_EMAILS env var (kept out of source control)
+    if config.WORK_EMAILS:
+        quoted_emails = " and ".join(f"'{e}'" for e in config.WORK_EMAILS)
+        work_email_instruction = (
+            "CRITICAL INSTRUCTION: If the user mentions adding work calendars or inviting work emails "
+            "(e.g. \"add our work calendars\", \"invite our work emails\"), you MUST include "
+            f"{quoted_emails} in the attendees array. Also extract any other explicit email addresses mentioned."
+        )
+    else:
+        work_email_instruction = "Extract any explicit email addresses mentioned into the attendees array."
+
     prompt = f"""
     You are an intelligent calendar assistant. 
     The current date and time is: {now}
@@ -101,7 +112,7 @@ def parse_sms_to_event(sms_text: str, timezone_offset: str = "-04:00") -> dict:
     
     Make sure to infer relative dates (tomorrow, next wednesday) properly based on the current date and time.
     CRITICAL INSTRUCTION FOR ALL-DAY EVENTS: If the user mentions 'all day', 'full day', or creates an event for a day without specifying start/end hours (e.g., 'Mom\'s Birthday', 'vacation Monday through Friday', 'school closed tomorrow', 'primrose closed on 9/7 all day'), set 'all_day' to true, 'start_time' to 'YYYY-MM-DD', and 'end_time' to the exclusive end date 'YYYY-MM-DD' (the day immediately following the last day of the event).
-    CRITICAL INSTRUCTION: If the user mentions adding work calendars or inviting work emails (e.g. "add our work calendars", "invite our work emails"), you MUST include 'attendee1@example.com' and 'attendee2@example.com' in the attendees array. Also extract any other explicit email addresses mentioned.
+    {work_email_instruction}
     """
     
     response = model.generate_content(prompt)
